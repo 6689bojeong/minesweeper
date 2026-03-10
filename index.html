@@ -1,285 +1,351 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Flag, Bomb, RefreshCw, Clock, Trophy } from 'lucide-react';
-
-const LEVELS = {
-  EASY: { rows: 9, cols: 9, mines: 10, label: '초급' },
-  MEDIUM: { rows: 16, cols: 16, mines: 40, label: '중급' },
-  HARD: { rows: 16, cols: 30, mines: 99, label: '고급' }
-};
-
-const App = () => {
-  const [level, setLevel] = useState(LEVELS.EASY);
-  const [grid, setGrid] = useState([]);
-  const [gameOver, setGameOver] = useState(false);
-  const [win, setWin] = useState(false);
-  const [minesLeft, setMinesLeft] = useState(LEVELS.EASY.mines);
-  const [timer, setTimer] = useState(0);
-  const [isFirstClick, setIsFirstClick] = useState(true);
-  const [activeTimer, setActiveTimer] = useState(false);
-
-  // Initialize board
-  const initBoard = useCallback((currentLevel) => {
-    const newGrid = Array(currentLevel.rows).fill(null).map((_, r) =>
-      Array(currentLevel.cols).fill(null).map((_, c) => ({
-        r, c,
-        isMine: false,
-        isRevealed: false,
-        isFlagged: false,
-        neighborCount: 0
-      }))
-    );
-    setGrid(newGrid);
-    setGameOver(false);
-    setWin(false);
-    setMinesLeft(currentLevel.mines);
-    setTimer(0);
-    setIsFirstClick(true);
-    setActiveTimer(false);
-  }, []);
-
-  useEffect(() => {
-    initBoard(level);
-  }, [level, initBoard]);
-
-  // Timer effect
-  useEffect(() => {
-    let interval;
-    if (activeTimer && !gameOver && !win) {
-      interval = setInterval(() => {
-        setTimer(t => t + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [activeTimer, gameOver, win]);
-
-  const placeMines = (startR, startC, currentGrid) => {
-    let minesPlaced = 0;
-    const newGrid = [...currentGrid.map(row => [...row])];
-    
-    while (minesPlaced < level.mines) {
-      const r = Math.floor(Math.random() * level.rows);
-      const c = Math.floor(Math.random() * level.cols);
-      
-      // Don't place mine on first click or already placed mine
-      if (!newGrid[r][c].isMine && !(r === startR && c === startC)) {
-        newGrid[r][c].isMine = true;
-        minesPlaced++;
-      }
-    }
-
-    // Calculate neighbors
-    for (let r = 0; r < level.rows; r++) {
-      for (let c = 0; c < level.cols; c++) {
-        if (!newGrid[r][c].isMine) {
-          let count = 0;
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const nr = r + dr, nc = c + dc;
-              if (nr >= 0 && nr < level.rows && nc >= 0 && nc < level.cols && newGrid[nr][nc].isMine) {
-                count++;
-              }
-            }
-          }
-          newGrid[r][c].neighborCount = count;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>귀여운 지뢰찾기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Pretendard', sans-serif;
+            overflow-x: hidden;
         }
-      }
-    }
-    return newGrid;
-  };
-
-  const revealCell = (r, c) => {
-    if (gameOver || win || grid[r][c].isRevealed || grid[r][c].isFlagged) return;
-
-    let newGrid = [...grid.map(row => [...row])];
-    
-    if (isFirstClick) {
-      newGrid = placeMines(r, c, newGrid);
-      setIsFirstClick(false);
-      setActiveTimer(true);
-    }
-
-    if (newGrid[r][c].isMine) {
-      // Game Over
-      newGrid.forEach(row => row.forEach(cell => {
-        if (cell.isMine) cell.isRevealed = true;
-      }));
-      setGrid(newGrid);
-      setGameOver(true);
-      return;
-    }
-
-    const floodFill = (row, col) => {
-      if (row < 0 || row >= level.rows || col < 0 || col >= level.cols || newGrid[row][col].isRevealed || newGrid[row][col].isFlagged) return;
-      
-      newGrid[row][col].isRevealed = true;
-      
-      if (newGrid[row][col].neighborCount === 0) {
-        for (let dr = -1; dr <= 1; dr++) {
-          for (let dc = -1; dc <= 1; dc++) {
-            floodFill(row + dr, col + dc);
-          }
+        .cell {
+            width: 32px;
+            height: 32px;
+            transition: all 0.2s;
         }
-      }
-    };
+        .cell.unrevealed {
+            background-color: #333333;
+            border: 2px solid #444444;
+        }
+        .cell.unrevealed:hover {
+            background-color: #555555;
+            cursor: pointer;
+        }
+        .cell.revealed {
+            background-color: #1a1a1a;
+            border: 1px solid #333333;
+        }
+        .cell.mine {
+            background-color: #ff4d4d !important;
+            animation: pop 0.3s ease-out;
+        }
+        @keyframes pop {
+            0% { transform: scale(0.8); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .number-1 { color: #3b82f6; }
+        .number-2 { color: #10b981; }
+        .number-3 { color: #ef4444; }
+        .number-4 { color: #8b5cf6; }
+        .number-5 { color: #f59e0b; }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .character-bounce {
+            animation: bounce 2s infinite ease-in-out;
+        }
+        
+        .modal {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
 
-    floodFill(r, c);
-    setGrid(newGrid);
-    checkWin(newGrid);
-  };
-
-  const toggleFlag = (e, r, c) => {
-    e.preventDefault();
-    if (gameOver || win || grid[r][c].isRevealed) return;
-
-    const newGrid = [...grid.map(row => [...row])];
-    const cell = newGrid[r][c];
-    
-    if (!cell.isFlagged && minesLeft > 0) {
-      cell.isFlagged = true;
-      setMinesLeft(prev => prev - 1);
-    } else if (cell.isFlagged) {
-      cell.isFlagged = false;
-      setMinesLeft(prev => prev + 1);
-    }
-    
-    setGrid(newGrid);
-  };
-
-  const checkWin = (currentGrid) => {
-    const unrevealedNonMines = currentGrid.flat().filter(cell => !cell.isMine && !cell.isRevealed);
-    if (unrevealedNonMines.length === 0) {
-      setWin(true);
-      setMinesLeft(0);
-    }
-  };
-
-  const getNumberColor = (num) => {
-    const colors = [
-      '', 'text-blue-600', 'text-green-600', 'text-red-600', 
-      'text-purple-800', 'text-red-800', 'text-teal-600', 'text-black', 'text-gray-600'
-    ];
-    return colors[num] || '';
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 font-sans text-slate-800">
-      <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-4xl">
-        <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-          <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-            MINESWEEPER
-          </h1>
-          
-          <div className="flex bg-slate-100 p-1 rounded-lg">
-            {Object.entries(LEVELS).map(([key, value]) => (
-              <button
-                key={key}
-                onClick={() => setLevel(value)}
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
-                  level === value 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {value.label}
-              </button>
-            ))}
-          </div>
+    <!-- Header & Character -->
+    <div class="flex flex-col items-center mb-6">
+        <div class="text-6xl mb-2 character-bounce">🐱</div>
+        <div id="cheer-bubble" class="bg-white text-black px-4 py-2 rounded-2xl relative mb-4 font-bold text-sm">
+            안녕! 내가 도와줄게! 지뢰를 다 찾아보자!
+            <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white"></div>
         </div>
-
-        <div className="flex justify-center gap-8 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <div className="flex items-center gap-2">
-            <Flag className="w-5 h-5 text-red-500" />
-            <span className="font-mono text-xl font-bold">{String(minesLeft).padStart(3, '0')}</span>
-          </div>
-          
-          <button 
-            onClick={() => initBoard(level)}
-            className="p-2 bg-white rounded-full shadow-md hover:scale-110 active:scale-95 transition-transform border border-slate-200 text-blue-600"
-          >
-            <RefreshCw className={`w-6 h-6 ${gameOver ? 'animate-spin' : ''}`} />
-          </button>
-
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-500" />
-            <span className="font-mono text-xl font-bold">{String(timer).padStart(3, '0')}</span>
-          </div>
-        </div>
-
-        <div className="flex justify-center overflow-auto max-h-[60vh] p-2">
-          <div 
-            className="grid gap-1 bg-slate-200 p-1 rounded-sm shadow-inner"
-            style={{ 
-              gridTemplateColumns: `repeat(${level.cols}, 1fr)`,
-              width: 'fit-content'
-            }}
-          >
-            {grid.map((row, r) => (
-              row.map((cell, c) => (
-                <div
-                  key={`${r}-${c}`}
-                  onClick={() => revealCell(r, c)}
-                  onContextMenu={(e) => toggleFlag(e, r, c)}
-                  className={`
-                    w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-sm font-bold cursor-pointer
-                    transition-all duration-100 select-none
-                    ${cell.isRevealed 
-                      ? 'bg-slate-50 shadow-none' 
-                      : 'bg-white hover:bg-slate-100 shadow-[2px_2px_0px_rgba(0,0,0,0.1)] active:shadow-none translate-y-[-1px] active:translate-y-0'
-                    }
-                    ${cell.isMine && cell.isRevealed ? 'bg-red-100' : ''}
-                  `}
-                >
-                  {cell.isRevealed ? (
-                    cell.isMine ? (
-                      <Bomb className="w-5 h-5 text-red-600 fill-red-600" />
-                    ) : (
-                      cell.neighborCount > 0 && (
-                        <span className={getNumberColor(cell.neighborCount)}>
-                          {cell.neighborCount}
-                        </span>
-                      )
-                    )
-                  ) : (
-                    cell.isFlagged && <Flag className="w-4 h-4 text-red-500 fill-red-500 animate-bounce" />
-                  )}
-                </div>
-              ))
-            ))}
-          </div>
-        </div>
-
-        {(gameOver || win) && (
-          <div className="mt-8 flex flex-col items-center animate-in fade-in zoom-in duration-300">
-            <div className={`flex items-center gap-3 px-6 py-3 rounded-full font-bold text-lg shadow-lg border-2 ${
-              win ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'
-            }`}>
-              {win ? (
-                <>
-                  <Trophy className="w-6 h-6" />
-                  축하합니다! 승리하셨습니다!
-                </>
-              ) : (
-                <>
-                  <Bomb className="w-6 h-6" />
-                  게임 오버! 지뢰를 밟았습니다.
-                </>
-              )}
-            </div>
-            <button
-              onClick={() => initBoard(level)}
-              className="mt-4 px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-md active:translate-y-1"
-            >
-              다시 시작하기
-            </button>
-          </div>
-        )}
-
-        <div className="mt-8 text-center text-slate-400 text-sm">
-          <p>좌클릭: 칸 열기 | 우클릭: 깃발 꽂기</p>
-        </div>
-      </div>
+        <h1 class="text-3xl font-black text-yellow-400 mb-2">SMILE MINESWEEPER</h1>
     </div>
-  );
-};
 
-export default App;
+    <!-- Stats Bar -->
+    <div class="flex gap-6 mb-4 bg-gray-800 p-4 rounded-xl border border-gray-700 w-full max-w-md justify-around shadow-lg">
+        <div class="text-center">
+            <p class="text-xs text-gray-400">남은 지뢰</p>
+            <p id="mine-count" class="text-xl font-bold text-red-400">10</p>
+        </div>
+        <div class="text-center">
+            <p class="text-xs text-gray-400">시간</p>
+            <p id="timer" class="text-xl font-bold">000</p>
+        </div>
+        <div class="text-center">
+            <p class="text-xs text-gray-400">남은 힌트</p>
+            <p id="hint-count" class="text-xl font-bold text-blue-400">5</p>
+        </div>
+    </div>
+
+    <!-- Game Board -->
+    <div id="board" class="grid gap-1 p-2 bg-gray-900 border-4 border-gray-700 rounded-lg shadow-2xl"></div>
+
+    <!-- Controls -->
+    <div class="mt-8 flex gap-4">
+        <button onclick="useHint()" id="hint-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full font-bold shadow-lg transition-all active:scale-95">
+            🔍 힌트 사용
+        </button>
+        <button onclick="initGame()" class="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-3 rounded-full font-bold shadow-lg transition-all active:scale-95">
+            🔄 다시 시작
+        </button>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="modal" class="hidden fixed inset-0 modal flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-3xl border-2 border-yellow-500 text-center max-w-sm mx-4">
+            <div id="modal-icon" class="text-6xl mb-4"></div>
+            <h2 id="modal-title" class="text-3xl font-bold mb-4">결과</h2>
+            <p id="modal-msg" class="text-gray-300 mb-6"></p>
+            <button onclick="initGame()" class="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl hover:bg-yellow-400 transition-colors">
+                다시 도전하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 10;
+        const MINE_COUNT = 10;
+        let board = [];
+        let revealedCount = 0;
+        let hintsLeft = 5;
+        let timer = 0;
+        let timerInterval;
+        let gameActive = false;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTone(freq, type, duration) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const sounds = {
+            click: () => playTone(800, 'sine', 0.1),
+            reveal: () => playTone(1200, 'sine', 0.05),
+            mine: () => {
+                playTone(200, 'sawtooth', 0.5);
+                playTone(100, 'sawtooth', 0.5);
+            },
+            win: () => {
+                [523, 659, 783, 1046].forEach((f, i) => {
+                    setTimeout(() => playTone(f, 'square', 0.2), i * 100);
+                });
+            },
+            hint: () => playTone(900, 'triangle', 0.3)
+        };
+
+        const cheerMessages = [
+            "할 수 있어! 힘내!",
+            "오! 방금 건 대단했어!",
+            "지뢰가 어디 숨었을까?",
+            "거의 다 왔어! 조금만 더!",
+            "조심해, 여긴 위험해 보여!",
+            "와우! 넌 천재야!",
+            "힌트가 필요하면 말해줘!"
+        ];
+
+        function setCheer(msg) {
+            const bubble = document.getElementById('cheer-bubble');
+            bubble.innerText = msg;
+        }
+
+        function initGame() {
+            clearInterval(timerInterval);
+            gameActive = true;
+            revealedCount = 0;
+            hintsLeft = 5;
+            timer = 0;
+            board = [];
+            
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('timer').innerText = "000";
+            document.getElementById('hint-count').innerText = hintsLeft;
+            document.getElementById('mine-count').innerText = MINE_COUNT;
+            setCheer("새로운 게임 시작! 가보자고!");
+
+            const boardEl = document.getElementById('board');
+            boardEl.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
+            boardEl.innerHTML = '';
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                board[r] = [];
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    board[r][c] = {
+                        r, c,
+                        isMine: false,
+                        revealed: false,
+                        flagged: false,
+                        neighborCount: 0
+                    };
+                    const cellEl = document.createElement('div');
+                    cellEl.id = `cell-${r}-${c}`;
+                    cellEl.className = 'cell unrevealed rounded-md flex items-center justify-center font-bold text-lg';
+                    cellEl.onclick = () => handleCellClick(r, c);
+                    cellEl.oncontextmenu = (e) => {
+                        e.preventDefault();
+                        toggleFlag(r, c);
+                    };
+                    boardEl.appendChild(cellEl);
+                }
+            }
+
+            let minesPlaced = 0;
+            while (minesPlaced < MINE_COUNT) {
+                let r = Math.floor(Math.random() * BOARD_SIZE);
+                let c = Math.floor(Math.random() * BOARD_SIZE);
+                if (!board[r][c].isMine) {
+                    board[r][c].isMine = true;
+                    minesPlaced++;
+                }
+            }
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c].isMine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            const nr = r + dr, nc = c + dc;
+                            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc].isMine) {
+                                count++;
+                            }
+                        }
+                    }
+                    board[r][c].neighborCount = count;
+                }
+            }
+
+            startTimer();
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timer++;
+                document.getElementById('timer').innerText = timer.toString().padStart(3, '0');
+                if(timer % 15 === 0) setCheer(cheerMessages[Math.floor(Math.random() * cheerMessages.length)]);
+            }, 1000);
+        }
+
+        function handleCellClick(r, c) {
+            if (!gameActive || board[r][c].revealed || board[r][c].flagged) return;
+
+            if (board[r][c].isMine) {
+                gameOver(false);
+                return;
+            }
+
+            revealCell(r, c);
+            sounds.reveal();
+
+            if (revealedCount === BOARD_SIZE * BOARD_SIZE - MINE_COUNT) {
+                gameOver(true);
+            }
+        }
+
+        function revealCell(r, c) {
+            if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c].revealed || board[r][c].flagged) return;
+
+            board[r][c].revealed = true;
+            revealedCount++;
+            const el = document.getElementById(`cell-${r}-${c}`);
+            el.className = 'cell revealed rounded-md flex items-center justify-center font-bold text-lg';
+            
+            if (board[r][c].neighborCount > 0) {
+                el.innerText = board[r][c].neighborCount;
+                el.classList.add(`number-${board[r][c].neighborCount}`);
+            } else {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        revealCell(r + dr, c + dc);
+                    }
+                }
+            }
+        }
+
+        function toggleFlag(r, c) {
+            if (!gameActive || board[r][c].revealed) return;
+            board[r][c].flagged = !board[r][c].flagged;
+            const el = document.getElementById(`cell-${r}-${c}`);
+            el.innerText = board[r][c].flagged ? '🚩' : '';
+            sounds.click();
+            
+            let flags = 0;
+            board.flat().forEach(cell => { if(cell.flagged) flags++; });
+            document.getElementById('mine-count').innerText = Math.max(0, MINE_COUNT - flags);
+        }
+
+        function useHint() {
+            if (!gameActive || hintsLeft <= 0) return;
+
+            const hiddenSafeCells = board.flat().filter(c => !c.isMine && !c.revealed);
+            if (hiddenSafeCells.length > 0) {
+                const hintCell = hiddenSafeCells[Math.floor(Math.random() * hiddenSafeCells.length)];
+                handleCellClick(hintCell.r, hintCell.c);
+                hintsLeft--;
+                document.getElementById('hint-count').innerText = hintsLeft;
+                sounds.hint();
+                setCheer("자, 여기 안전한 곳 하나 알려줄게! 😊");
+            }
+        }
+
+        function gameOver(isWin) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            
+            const modal = document.getElementById('modal');
+            const icon = document.getElementById('modal-icon');
+            const title = document.getElementById('modal-title');
+            const msg = document.getElementById('modal-msg');
+
+            if (isWin) {
+                sounds.win();
+                icon.innerText = "🏆";
+                title.innerText = "대성공!";
+                msg.innerText = `축하해! 모든 지뢰(웃음)를 찾아냈어!\n기록: ${timer}초`;
+                setCheer("역시 넌 최고야! 내가 그럴 줄 알았어!");
+                modal.classList.remove('hidden');
+            } else {
+                sounds.mine();
+                setCheer("앗... 지뢰를 찾아버렸네! 3초 뒤에 알려줄게!");
+                
+                // Show all mines immediately
+                board.flat().forEach(cell => {
+                    if (cell.isMine) {
+                        const el = document.getElementById(`cell-${cell.r}-${cell.c}`);
+                        el.className = 'cell revealed mine rounded-md flex items-center justify-center text-lg';
+                        el.innerText = '😊';
+                    }
+                });
+
+                // Show modal after 3 seconds
+                setTimeout(() => {
+                    if (gameActive) return; // Prevent if game restarted during delay
+                    icon.innerText = "💥";
+                    title.innerText = "이런!";
+                    msg.innerText = "지뢰를 밟아버렸어... 하지만 다시 하면 돼!";
+                    modal.classList.remove('hidden');
+                }, 3000);
+            }
+        }
+
+        window.onload = initGame;
+    </script>
+</body>
+</html>
